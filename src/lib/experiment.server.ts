@@ -10,11 +10,12 @@ export async function logEvent(
   eventName: string,
   payload?: Record<string, unknown>,
 ) {
-  await supabaseAdmin.from("experiment_events").insert({
+  const { error } = await supabaseAdmin.from("experiment_events").insert({
     session_id: sessionId,
     event_name: eventName,
     payload: payload ?? null,
   });
+  if (error) throw new Error("Could not save experiment event");
 }
 
 export async function createExperimentSession(participantCode?: string) {
