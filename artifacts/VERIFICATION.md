@@ -35,4 +35,4 @@ All running-application checks use the replacement Free Supabase project. This d
 
 Android hardware was not tested. The Postgres integration suite emulates Supabase's Auth/Storage surroundings rather than running the entire Supabase stack. Real browser/Supabase checks and the user-operated iPhone check provide separate evidence. There are no real child-participant results, no return-engagement experiment, no production abuse/retention controls, and no public deployment.
 
-The original Lovable runtime has not been reconfigured. Apply the upgrade and configure the same runtime's backend credentials before syncing this change to another deployment. The feature branch commit is local; main is unchanged.
+The original Lovable runtime has not been reconfigured. Apply the upgrade and configure the same runtime's backend credentials before syncing this change to another deployment. The verified implementation is maintained on `feat/camera-research-dashboard` in pull request #1; main remains unchanged until an approved merge.

@@ -108,6 +108,6 @@ Evidence and limits: `artifacts/VERIFICATION.md`, `artifacts/backend-verificatio
 - Clearing browser storage or switching devices/origins starts a separate session. Transient errors preserve the current token; there is no cross-device resume service.
 - A failed or ambiguous database acknowledgment after uploading may leave an unreferenced private object. The code deliberately avoids deleting possibly committed evidence. There is no scheduled retention or orphan cleanup; review these before real participant use.
 - There is no production abuse limiting or deployment hardening. Keep this a restricted coursework prototype.
-- Changes are committed locally on the feature branch. Before syncing them to Lovable or another runtime, apply the upgrade to that runtime's database and configure the server secrets. Do not merge or deploy without owner approval.
+- Updated code is maintained on `feat/camera-research-dashboard` in pull request #1, separately from `main`. Before syncing it to Lovable or another runtime, apply the upgrade to that runtime's database and configure the server secrets. Do not merge or deploy without owner approval.
 
 Supabase references: [API keys](https://supabase.com/docs/guides/getting-started/api-keys), [Storage access control](https://supabase.com/docs/guides/storage/security/access-control).
