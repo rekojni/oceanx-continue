@@ -87,7 +87,7 @@ export const saveActivity = createServerFn({ method: "POST" })
     if (data.photoDataUrl && data.status !== "completed") throw new Error("Only completed activities accept photos");
     if (data.photoDataUrl) {
       if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(data.photoDataUrl)) throw new Error("Only JPEG photos are accepted");
-      const image = Buffer.from(data.photoDataUrl.split(",")[1], "base64");
+      const image = Buffer.from(data.photoDataUrl.split(",")[1] ?? "", "base64");
       if (image.byteLength > 300_000 || image[0] !== 0xff || image[1] !== 0xd8 || image[2] !== 0xff) {
         throw new Error("Please use a smaller valid JPEG photograph");
       }
@@ -186,9 +186,7 @@ export const markNextModuleViewed = createServerFn({ method: "POST" })
 
 // ---------- Researcher-facing (authenticated admin only) ----------
 
-async function assertAdmin(supabase: {
-  rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown }>;
-}, userId: string) {
+async function assertAdmin(supabase: import("@supabase/supabase-js").SupabaseClient<import("@/integrations/supabase/types").Database>, userId: string) {
   const { data } = await supabase.rpc("has_role", {
     _user_id: userId,
     _role: "admin",
@@ -325,6 +323,6 @@ export const getResearchPhoto = createServerFn({ method: "POST" })
     if (error) throw new Error("Could not load photo");
     const payload = event?.payload;
     const url = payload && typeof payload === "object" && !Array.isArray(payload) && "photoDataUrl" in payload
-      ? payload.photoDataUrl : null;
+      ? payload["photoDataUrl"] : null;
     return { photoDataUrl: typeof url === "string" && url.startsWith("data:image/jpeg;base64,") ? url : null };
   });
