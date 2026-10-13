@@ -1,7 +1,7 @@
 // Server-only helpers for the experiment. Never imported by client code.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { QUIZ } from "./experiment-content";
-import type { Tables } from "@/integrations/supabase/types";
+import type { Tables, Json } from "@/integrations/supabase/types";
 
 export type ExperimentSession = Tables<"experiment_sessions">;
 
@@ -13,7 +13,7 @@ export async function logEvent(
   const { error } = await supabaseAdmin.from("experiment_events").insert({
     session_id: sessionId,
     event_name: eventName,
-    payload: payload ?? null,
+    payload: (payload ?? null) as Json,
   });
   if (error) throw new Error("Could not save experiment event");
 }
@@ -72,7 +72,7 @@ export async function updateSession(
   const session = await getSessionForToken(sessionId, token);
   const { error } = await supabaseAdmin
     .from("experiment_sessions")
-    .update(patch)
+    .update(patch as Tables<"experiment_sessions"> extends infer T ? Partial<T> : never)
     .eq("id", session.id);
   if (error) throw new Error("Could not save progress");
   await logEvent(session.id, eventName, eventPayload);
