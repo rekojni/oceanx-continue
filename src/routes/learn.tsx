@@ -8,6 +8,7 @@ import {
   Home,
   Loader2,
   Printer,
+  Camera,
   Waves,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -196,11 +197,11 @@ function LearnPage() {
         {stage === "activity" && stored && (
           <ActivityStage
             busy={busy}
-            onSubmit={async (status, text) => {
+            onSubmit={async (status, text, photoDataUrl) => {
               setBusy(true);
               try {
                 await saveActivity({
-                  data: { ...stored, status, observationText: text },
+                  data: { ...stored, status, observationText: text, photoDataUrl },
                 });
                 await refresh(stored);
                 setStage("quiz");
@@ -329,7 +330,7 @@ function WelcomeStage({
         about 5–10 minutes, and you can refresh the page without losing your place.
       </p>
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        No names, emails or photos — this is an anonymous educational demonstration with
+        No names or emails are requested. Optional object-only photos are collected for Group B — this is an educational demonstration with
         sample content, not official OceanX material.
       </p>
       <div className="mt-6">
@@ -471,6 +472,33 @@ function ActivityStage({
   onSubmit: (status: "completed" | "skipped", text?: string) => void;
 }) {
   const [text, setText] = useState("");
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | undefined>();
+  const [photoError, setPhotoError] = useState("");
+  const onPhoto = (file?: File) => {
+    setPhotoError("");
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setPhotoError("Please select a photo."); return; }
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, 720 / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Image conversion is unavailable");
+        context.drawImage(img, 0, 0, canvas.width, canvas.height);
+        let encoded = canvas.toDataURL("image/jpeg", 0.65);
+        if (encoded.length > 400_000) encoded = canvas.toDataURL("image/jpeg", 0.35);
+        if (encoded.length > 400_000) throw new Error("Image too large; use a smaller photo");
+        setPhotoDataUrl(encoded);
+      } catch (err) { setPhotoError(err instanceof Error ? err.message : "Could not process photo"); }
+      URL.revokeObjectURL(objectUrl);
+    };
+    img.onerror = () => { setPhotoError("Could not open that photo"); URL.revokeObjectURL(objectUrl); };
+    img.src = objectUrl;
+  };
   return (
     <StageCard>
       <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ocean-teal">
@@ -505,11 +533,19 @@ function ActivityStage({
           className="mt-1.5"
         />
       </div>
+      <div className="mt-5 rounded-xl border border-border p-4">
+        <label htmlFor="activity-photo" className="flex items-center gap-2 font-semibold"><Camera className="size-5" /> Optional photo of an object</label>
+        <p className="my-2 text-xs text-muted-foreground">Ask an adult first. Only photograph plastic objects, never people, faces, addresses or identifiable locations. The photo is stored privately for research review.</p>
+        <input id="activity-photo" type="file" accept="image/*" capture="environment" className="block w-full text-sm" onChange={(event) => onPhoto(event.target.files?.[0])} />
+        {photoDataUrl && <img src={photoDataUrl} alt="Selected plastic object" className="mt-3 max-h-44 rounded-lg object-contain" />}
+        {photoError && <p role="alert" className="mt-2 text-sm text-destructive">{photoError}</p>}
+        {photoDataUrl && <button type="button" className="mt-2 text-sm underline" onClick={() => setPhotoDataUrl(undefined)}>Remove photo</button>}
+      </div>
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <Button
           size="lg"
-          disabled={busy || text.trim().length < 5}
-          onClick={() => onSubmit("completed", text)}
+          disabled={busy || text.trim().length < 5 || !!photoError}
+          onClick={() => onSubmit("completed", text, photoDataUrl)}
         >
           {busy ? <Loader2 className="animate-spin" /> : <Check />}
           I did it — save my answer
