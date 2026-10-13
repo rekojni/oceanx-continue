@@ -1,0 +1,19 @@
+name: Validate OceanX prototype
+on:
+  push:
+    branches: [feat/camera-research-dashboard]
+  pull_request:
+    branches: [main]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Build and generate TanStack routes
+        run: bun run build
+      - name: Typecheck
+        run: bunx tsc --noEmit
+      - name: Unit tests
+        run: bun run test
