@@ -74,6 +74,7 @@ export const saveActivity = createServerFn({ method: "POST" })
       .extend({
         status: z.enum(["completed", "skipped"]),
         observationText: z.string().max(500).optional(),
+        photoDataUrl: z.string().max(400_000).optional(),
       })
       .parse(d),
   )
@@ -82,6 +83,14 @@ export const saveActivity = createServerFn({ method: "POST" })
     const session = await getSessionForToken(data.sessionId, data.token);
     if (session.assigned_group !== "B") {
       throw new Error("This session does not include the home activity");
+    }
+    if (data.photoDataUrl && data.status !== "completed") throw new Error("Only completed activities accept photos");
+    if (data.photoDataUrl) {
+      if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(data.photoDataUrl)) throw new Error("Only JPEG photos are accepted");
+      const image = Buffer.from(data.photoDataUrl.split(",")[1], "base64");
+      if (image.byteLength > 300_000 || image[0] !== 0xff || image[1] !== 0xd8 || image[2] !== 0xff) {
+        throw new Error("Please use a smaller valid JPEG photograph");
+      }
     }
     await updateSession(
       data.sessionId,
@@ -96,6 +105,10 @@ export const saveActivity = createServerFn({ method: "POST" })
       },
       `activity_${data.status}`,
     );
+    if (data.photoDataUrl) {
+      const { logEvent } = await import("./experiment.server");
+      await logEvent(session.id, "activity_photo_submitted", { photoDataUrl: data.photoDataUrl });
+    }
     return { ok: true };
   });
 
@@ -123,6 +136,7 @@ export const saveQuiz = createServerFn({ method: "POST" })
         quiz_answers: data.answers,
         comprehension_score: score,
         meaningfulness: data.meaningfulness,
+        decision_reached_at: new Date().toISOString(),
         parent_help: session.assigned_group === "B" ? (data.parentHelp ?? null) : null,
       },
       "quiz_completed",
@@ -137,15 +151,10 @@ export const chooseContinuation = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { updateSession } = await import("./experiment.server");
-    const now = new Date().toISOString();
     await updateSession(
       data.sessionId,
       data.token,
-      {
-        decision_reached_at: now,
-        continuation_choice: data.choice,
-        ...(data.choice === "continue" ? { next_module_started_at: now } : {}),
-      },
+      { continuation_choice: data.choice },
       "continuation_chosen",
       { choice: data.choice },
     );
@@ -208,7 +217,12 @@ export const getResearchData = createServerFn({ method: "GET" })
       )
       .order("created_at", { ascending: false });
     if (error) throw new Error("Could not load research data");
-    return { sessions: sessions ?? [] };
+    const { data: photoEvents, error: photoError } = await context.supabase
+      .from("experiment_events")
+      .select("session_id, created_at")
+      .eq("event_name", "activity_photo_submitted");
+    if (photoError) throw new Error("Could not load artefact metadata");
+    return { sessions: sessions ?? [], photoSessionIds: [...new Set((photoEvents ?? []).map((e) => e.session_id))] };
   });
 
 export const seedDemoSessions = createServerFn({ method: "POST" })
@@ -291,4 +305,26 @@ export const seedDemoSessions = createServerFn({ method: "POST" })
       .insert(demoRows);
     if (error) throw new Error("Could not insert demo sessions");
     return { inserted: demoRows.length };
+  });
+
+// Photos remain private in the experiment event log. This endpoint checks real
+// authentication and admin role before returning any photo bytes.
+export const getResearchPhoto = createServerFn({ method: "POST" })
+  .inputValidator((data) => z.object({ sessionId: z.string().uuid() }).parse(data))
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { data: event, error } = await context.supabase
+      .from("experiment_events")
+      .select("payload")
+      .eq("session_id", data.sessionId)
+      .eq("event_name", "activity_photo_submitted")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error("Could not load photo");
+    const payload = event?.payload;
+    const url = payload && typeof payload === "object" && !Array.isArray(payload) && "photoDataUrl" in payload
+      ? payload.photoDataUrl : null;
+    return { photoDataUrl: typeof url === "string" && url.startsWith("data:image/jpeg;base64,") ? url : null };
   });
