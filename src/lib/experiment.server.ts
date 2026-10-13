@@ -18,36 +18,39 @@ export async function logEvent(
   if (error) throw new Error("Could not save experiment event");
 }
 
-export async function createExperimentSession(participantCode?: string) {
-  // Approximately balanced allocation: assign to whichever group is smaller
-  // (random on a tie). Demo rows never affect the balance.
-  const { data: rows, error: countErr } = await supabaseAdmin
-    .from("experiment_sessions")
-    .select("assigned_group")
-    .eq("is_demo", false);
-  if (countErr) throw new Error("Could not prepare a new session");
+export async function createExperimentSession(
+  sessionId: string,
+  token: string,
+  participantCode?: string,
+  isDemo = false,
+) {
+  const { data, error } = await supabaseAdmin.rpc("oceanx_create_session", {
+    _id: sessionId,
+    _token: token,
+    _code: participantCode?.trim() ?? "",
+    _demo: isDemo,
+  });
+  if (error || !data)
+    throw new Error("Could not create a session. Check the backend connection and migrations.");
+  return data as { sessionId: string; token: string; group: "A" | "B" };
+}
 
-  const countA = (rows ?? []).filter((r) => r.assigned_group === "A").length;
-  const countB = (rows ?? []).filter((r) => r.assigned_group === "B").length;
-  const group =
-    countA === countB ? (Math.random() < 0.5 ? "A" : "B") : countA < countB ? "A" : "B";
-
-  const { data, error } = await supabaseAdmin
-    .from("experiment_sessions")
-    .insert({
-      assigned_group: group,
-      participant_code: participantCode?.trim() ? participantCode.trim() : null,
-    })
-    .select("id, session_token, assigned_group")
-    .single();
-  if (error || !data) throw new Error("Could not create a session");
-
-  await logEvent(data.id, "session_started", { group: data.assigned_group });
-  return {
-    sessionId: data.id,
-    token: data.session_token,
-    group: data.assigned_group as "A" | "B",
-  };
+export async function saveStep(
+  sessionId: string,
+  token: string,
+  step: string,
+  payload: Record<string, unknown> = {},
+) {
+  const { data, error } = await supabaseAdmin.rpc("oceanx_save_step", {
+    _id: sessionId,
+    _token: token,
+    _step: step,
+    _payload: payload as Json,
+  });
+  if (error || !data)
+    throw new Error(
+      "Could not save this step. Check your connection and complete the earlier steps first.",
+    );
 }
 
 export async function getSessionForToken(sessionId: string, token: string) {
@@ -62,26 +65,6 @@ export async function getSessionForToken(sessionId: string, token: string) {
   return data;
 }
 
-export async function updateSession(
-  sessionId: string,
-  token: string,
-  patch: Record<string, unknown>,
-  eventName: string,
-  eventPayload?: Record<string, unknown>,
-) {
-  const session = await getSessionForToken(sessionId, token);
-  const { error } = await supabaseAdmin
-    .from("experiment_sessions")
-    .update(patch as Tables<"experiment_sessions"> extends infer T ? Partial<T> : never)
-    .eq("id", session.id);
-  if (error) throw new Error("Could not save progress");
-  await logEvent(session.id, eventName, eventPayload);
-  return session;
-}
-
 export function scoreQuiz(answers: number[]) {
-  return QUIZ.reduce(
-    (score, q, i) => score + (answers[i] === q.correctIndex ? 1 : 0),
-    0,
-  );
+  return QUIZ.reduce((score, q, i) => score + (answers[i] === q.correctIndex ? 1 : 0), 0);
 }

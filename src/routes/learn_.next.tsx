@@ -3,10 +3,10 @@ import { useEffect, useState } from "react";
 import { Check, Loader2, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HABITATS, NEXT_MODULE_TITLE } from "@/lib/experiment-content";
-import { getSessionState, markNextModuleViewed } from "@/lib/experiment.functions";
-import { loadStoredSession } from "@/lib/session-store";
+import { markNextModuleViewed } from "@/lib/experiment.functions";
+import { clearStoredSession, loadStoredSession } from "@/lib/session-store";
 
-export const Route = createFileRoute("/learn/next")({
+export const Route = createFileRoute("/learn_/next")({
   head: () => ({
     meta: [
       { title: "Ocean Habitats | OceanX Learning Journey" },
@@ -24,25 +24,31 @@ export const Route = createFileRoute("/learn/next")({
 });
 
 function NextModulePage() {
-  const [state, setState] = useState<"loading" | "recorded" | "no-session">("loading");
+  const [state, setState] = useState<"loading" | "recorded" | "no-session" | "error">("loading");
 
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
+    let active = true;
     const saved = loadStoredSession();
     if (!saved) {
       setState("no-session");
       return;
     }
     markNextModuleViewed({ data: saved })
-      .then(async (res) => {
+      .then((res) => {
         if (!res.ok) {
           setState("no-session");
           return;
         }
-        await getSessionState({ data: saved });
-        setState("recorded");
+        if (active) setState("recorded");
       })
-      .catch(() => setState("no-session"));
-  }, []);
+      .catch(() => {
+        if (active) setState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [retry]);
 
   return (
     <div className="ocean-surface min-h-screen">
@@ -70,10 +76,30 @@ function NextModulePage() {
           </p>
         )}
 
+        {state === "error" && (
+          <div role="alert" className="mb-6 rounded-xl border bg-card p-4">
+            <p>
+              Your next journey is open, but its start has not been confirmed as saved. Check your
+              connection and retry.
+            </p>
+            <Button
+              className="mt-3"
+              onClick={() => {
+                setState("loading");
+                setRetry((v) => v + 1);
+              }}
+            >
+              Retry saving progress
+            </Button>
+          </div>
+        )}
         {state === "no-session" && (
           <p className="mb-6 rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
             This module is part of the learning journey.{" "}
-            <Link to="/learn" className="font-semibold text-primary underline-offset-4 hover:underline">
+            <Link
+              to="/learn"
+              className="font-semibold text-primary underline-offset-4 hover:underline"
+            >
               Start from the beginning
             </Link>{" "}
             to have your progress saved.
@@ -105,6 +131,15 @@ function NextModulePage() {
         <div className="mt-10 flex flex-col items-start gap-3 sm:flex-row">
           <Button asChild>
             <Link to="/">Finish and go home</Link>
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              clearStoredSession();
+              window.location.assign("/learn");
+            }}
+          >
+            Start a separate session
           </Button>
           <Button asChild variant="outline">
             <Link to="/about">About this experiment</Link>

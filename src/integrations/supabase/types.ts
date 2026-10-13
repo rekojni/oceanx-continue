@@ -150,6 +150,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      oceanx_create_session: {
+        Args: { _id: string; _token: string; _code: string; _demo?: boolean }
+        Returns: Json
+      }
+      oceanx_save_step: {
+        Args: { _id: string; _token: string; _step: string; _payload?: Json }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

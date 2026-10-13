@@ -1,0 +1,38 @@
+{
+  "verifiedAt": "2026-10-13T13:58:27.194Z",
+  "browserDemoSessions": [
+    {
+      "participant_code": "BROWSER-DEMO-1",
+      "assigned_group": "A",
+      "is_demo": true,
+      "activity_status": null,
+      "quiz_completed_at": "2026-10-13T13:48:41.03898+00:00",
+      "decision_reached_at": "2026-10-13T13:48:41.869433+00:00",
+      "continuation_choice": "finish",
+      "next_module_started_at": null,
+      "classified_status": "Finished"
+    },
+    {
+      "participant_code": "BROWSER-DEMO-2",
+      "assigned_group": "B",
+      "is_demo": true,
+      "activity_status": "completed",
+      "quiz_completed_at": "2026-10-13T13:53:56.562596+00:00",
+      "decision_reached_at": "2026-10-13T13:53:57.469509+00:00",
+      "continuation_choice": "continue",
+      "next_module_started_at": "2026-10-13T13:54:10.739247+00:00",
+      "classified_status": "Continued"
+    }
+  ],
+  "photo": {
+    "privateStorage": true,
+    "bytes": 759,
+    "anonymousDenied": true,
+    "publicUrlDenied": true
+  },
+  "actualParticipantRecords": 0,
+  "notes": [
+    "These are actual browser-created software demonstration sessions, not participant results.",
+    "No camera hardware was exercised; a tiny PNG fixture verified the upload fallback."
+  ]
+}

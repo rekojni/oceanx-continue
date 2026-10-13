@@ -1,4 +1,16 @@
-# OceanX Continue
+# OceanX Learning Journey
+
+A student-built IS615 prototype comparing a shared digital ocean lesson with the same lesson plus a Group B home activity. It measures **actual next-module starts** and uses a persistent Supabase backend with restricted researcher access.
+
+Start on this Mac with `npm run dev -- --host 127.0.0.1 --port 5173`. For approved same-Wi-Fi iPhone testing, use `npm run dev:wifi` and open its printed URL.
+
+- [Setup, backend architecture and limits](OCEANX_PROTOTYPE_GUIDE.md)
+- [Two-minute walkthrough and report screenshots](DEMO_WALKTHROUGH.md)
+- [Verification evidence](artifacts/VERIFICATION.md)
+
+The updated local prototype uses the replacement Free Supabase project configured in ignored `.env.local`. Apply the SQL migrations and configure server secrets before connecting a different runtime. Demo/test sessions are excluded from participant results by default. No paid service or public deployment was used.
+
+## Original prototype brief
 
 Create a WORKING, polished, responsive full-stack web prototype called "OceanX Learning Journey | Beyond the Screen" for my university IS615 Digital Transformation Strategy INDIVIDUAL assignment. Start building now (not planning only). The application must meet an assessed requirement: a functional input interface, genuine persistent backend (Lovable Cloud/Supabase Postgres), trackable experiment evidence, and at least one working automated decision/update after user action; demonstrate a complete end-to-end learner workflow. I own this project; it is not an official OceanX product.
 
