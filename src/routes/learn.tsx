@@ -469,7 +469,7 @@ function ActivityStage({
   onSubmit,
 }: {
   busy: boolean;
-  onSubmit: (status: "completed" | "skipped", text?: string) => void;
+  onSubmit: (status: "completed" | "skipped", text?: string, photoDataUrl?: string) => void;
 }) {
   const [text, setText] = useState("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | undefined>();
