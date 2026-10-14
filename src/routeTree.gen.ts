@@ -10,12 +10,25 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as LearnRouteImport } from './routes/learn'
-import { Route as LearnNextRouteImport } from './routes/learn.next'
+import { Route as ResearchRouteImport } from './routes/research'
+import { Route as LearnNextRouteImport } from './routes/learn_.next'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LearnRoute = LearnRouteImport.update({
@@ -23,39 +36,64 @@ const LearnRoute = LearnRouteImport.update({
   path: '/learn',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResearchRoute = ResearchRouteImport.update({
+  id: '/research',
+  path: '/research',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LearnNextRoute = LearnNextRouteImport.update({
-  id: '/next',
-  path: '/next',
-  getParentRoute: () => LearnRoute,
+  id: '/learn_/next',
+  path: '/learn/next',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/learn': typeof LearnRouteWithChildren
+  '/about': typeof AboutRoute
+  '/auth': typeof AuthRoute
+  '/learn': typeof LearnRoute
+  '/research': typeof ResearchRoute
   '/learn/next': typeof LearnNextRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/learn': typeof LearnRouteWithChildren
+  '/about': typeof AboutRoute
+  '/auth': typeof AuthRoute
+  '/learn': typeof LearnRoute
+  '/research': typeof ResearchRoute
   '/learn/next': typeof LearnNextRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/learn': typeof LearnRouteWithChildren
-  '/learn/next': typeof LearnNextRoute
+  '/about': typeof AboutRoute
+  '/auth': typeof AuthRoute
+  '/learn': typeof LearnRoute
+  '/research': typeof ResearchRoute
+  '/learn_/next': typeof LearnNextRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/learn' | '/learn/next'
+  fullPaths: '/' | '/about' | '/auth' | '/learn' | '/research' | '/learn/next'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/learn' | '/learn/next'
-  id: '__root__' | '/' | '/learn' | '/learn/next'
+  to: '/' | '/about' | '/auth' | '/learn' | '/research' | '/learn/next'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/auth'
+    | '/learn'
+    | '/research'
+    | '/learn_/next'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  LearnRoute: typeof LearnRouteWithChildren
+  AboutRoute: typeof AboutRoute
+  AuthRoute: typeof AuthRoute
+  LearnRoute: typeof LearnRoute
+  ResearchRoute: typeof ResearchRoute
+  LearnNextRoute: typeof LearnNextRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -67,6 +105,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/learn': {
       id: '/learn'
       path: '/learn'
@@ -74,29 +126,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LearnRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/learn/next': {
-      id: '/learn/next'
-      path: '/next'
+    '/research': {
+      id: '/research'
+      path: '/research'
+      fullPath: '/research'
+      preLoaderRoute: typeof ResearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/learn_/next': {
+      id: '/learn_/next'
+      path: '/learn/next'
       fullPath: '/learn/next'
       preLoaderRoute: typeof LearnNextRouteImport
-      parentRoute: typeof LearnRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
 
-interface LearnRouteChildren {
-  LearnNextRoute: typeof LearnNextRoute
-}
-
-const LearnRouteChildren: LearnRouteChildren = {
-  LearnNextRoute: LearnNextRoute,
-}
-
-const LearnRouteWithChildren = LearnRoute._addFileChildren(LearnRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  LearnRoute: LearnRouteWithChildren,
+  AboutRoute: AboutRoute,
+  AuthRoute: AuthRoute,
+  LearnRoute: LearnRoute,
+  ResearchRoute: ResearchRoute,
+  LearnNextRoute: LearnNextRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

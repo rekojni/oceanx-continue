@@ -1,15 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowRight,
-  Check,
-  Compass,
-  Home,
-  Loader2,
-  Printer,
-  Waves,
-} from "lucide-react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { ArrowRight, Check, Compass, Home, Loader2, Printer, Camera, Waves } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +24,7 @@ import {
   createSession,
   getSessionState,
   markLessonComplete,
+  markDecisionViewed,
   saveActivity,
   saveInteraction,
   saveQuiz,
@@ -39,9 +32,11 @@ import {
 import {
   clearStoredSession,
   loadStoredSession,
+  newSessionRef,
   saveStoredSession,
   type StoredSession,
 } from "@/lib/session-store";
+import { compressPhoto } from "@/lib/photo";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/learn")({
@@ -61,7 +56,7 @@ export const Route = createFileRoute("/learn")({
   component: LearnPage,
 });
 
-type Stage = "loading" | "welcome" | LearnStage;
+type Stage = "loading" | "welcome" | "resume-error" | LearnStage;
 
 function LearnPage() {
   const navigate = useNavigate();
@@ -72,14 +67,27 @@ function LearnPage() {
 
   const getState = useServerFn(getSessionState);
 
+  const [resumeError, setResumeError] = useState("");
+  const [retry, setRetry] = useState(0);
+
   useEffect(() => {
+    let active = true;
     const saved = loadStoredSession();
     if (!saved) {
       setStage("welcome");
       return;
     }
-    getState({ data: saved })
+    const resume = async () => {
+      if (saved.pending) {
+        await createSession({ data: { ...saved, isDemo: saved.isDemo ?? false } });
+        delete saved.pending;
+        saveStoredSession(saved);
+      }
+      return getState({ data: saved });
+    };
+    void resume()
       .then((snap) => {
+        if (!active) return;
         setStored(saved);
         setSnapshot(snap);
         const s = deriveStage(snap);
@@ -90,11 +98,17 @@ function LearnPage() {
         }
       })
       .catch(() => {
-        clearStoredSession();
-        setStage("welcome");
+        if (!active) return;
+        setResumeError(
+          "We couldn't reconnect to your saved journey. Your session is still on this device. Check your connection and try again.",
+        );
+        setStage("resume-error");
       });
+    return () => {
+      active = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [retry]);
 
   const refresh = async (s: StoredSession) => {
     const snap = await getState({ data: s });
@@ -125,13 +139,38 @@ function LearnPage() {
           </div>
         )}
 
+        {stage === "resume-error" && (
+          <StageCard>
+            <h1 className="text-2xl font-bold">Reconnect to your journey</h1>
+            <p role="alert" className="mt-3">
+              {resumeError}
+            </p>
+            <Button
+              className="mt-5"
+              onClick={() => {
+                setStage("loading");
+                setRetry((v) => v + 1);
+              }}
+            >
+              Try again
+            </Button>
+          </StageCard>
+        )}
+
         {stage === "welcome" && (
           <WelcomeStage
             busy={busy}
-            onStart={async (code) => {
+            onStart={async (code, isDemo) => {
               setBusy(true);
               try {
-                const res = await createSession({ data: { participantCode: code } });
+                const pending = {
+                  ...newSessionRef(),
+                  pending: true,
+                  participantCode: code,
+                  isDemo,
+                };
+                saveStoredSession(pending);
+                const res = await createSession({ data: pending });
                 const s = { sessionId: res.sessionId, token: res.token };
                 saveStoredSession(s);
                 setStored(s);
@@ -148,7 +187,10 @@ function LearnPage() {
                 });
                 setStage("lesson");
               } catch {
-                toast.error("Could not start a session. Please try again.");
+                setResumeError(
+                  "Could not start your journey. Check your connection or ask the facilitator to check the backend setup, then retry.",
+                );
+                setStage("resume-error");
               } finally {
                 setBusy(false);
               }
@@ -196,16 +238,25 @@ function LearnPage() {
         {stage === "activity" && stored && (
           <ActivityStage
             busy={busy}
-            onSubmit={async (status, text) => {
+            onSubmit={async (status, text, photoDataUrl) => {
               setBusy(true);
               try {
                 await saveActivity({
-                  data: { ...stored, status, observationText: text },
+                  data: { ...stored, status, observationText: text, photoDataUrl },
                 });
                 await refresh(stored);
+                toast.success(
+                  status === "completed"
+                    ? "Your observation and any photo have been saved."
+                    : "Your activity skip has been saved.",
+                );
                 setStage("quiz");
-              } catch {
-                toast.error("Could not save the activity. Please try again.");
+              } catch (error) {
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not save the activity. Please try again.",
+                );
               } finally {
                 setBusy(false);
               }
@@ -221,7 +272,7 @@ function LearnPage() {
               setBusy(true);
               try {
                 await saveQuiz({
-                  data: { ...stored, answers, meaningfulness, parentHelp },
+                  data: { ...stored, answers, meaningfulness, parentHelp: parentHelp ?? 0 },
                 });
                 await refresh(stored);
                 setStage("decision");
@@ -236,13 +287,14 @@ function LearnPage() {
 
         {stage === "decision" && stored && (
           <DecisionStage
+            stored={stored}
             busy={busy}
             onChoose={async (choice) => {
               setBusy(true);
               try {
                 await chooseContinuation({ data: { ...stored, choice } });
                 if (choice === "continue") {
-                  void navigate({ to: "/learn/next" });
+                  await navigate({ to: "/learn/next" });
                 } else {
                   await refresh(stored);
                   setStage("finished");
@@ -256,7 +308,23 @@ function LearnPage() {
           />
         )}
 
-        {stage === "finished" && <FinishedStage />}
+        {stage === "finished" && (
+          <>
+            <FinishedStage />
+            <Button
+              variant="outline"
+              className="mt-5"
+              onClick={() => {
+                clearStoredSession();
+                setStored(null);
+                setSnapshot(null);
+                setStage("welcome");
+              }}
+            >
+              Start a separate session
+            </Button>
+          </>
+        )}
       </main>
     </div>
   );
@@ -304,9 +372,7 @@ function ProgressSteps({ group, stage }: { group: "A" | "B"; stage: LearnStage }
 
 function StageCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">
-      {children}
-    </div>
+    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8">{children}</div>
   );
 }
 
@@ -315,26 +381,30 @@ function WelcomeStage({
   onStart,
 }: {
   busy: boolean;
-  onStart: (code?: string) => void;
+  onStart: (code: string | undefined, isDemo: boolean) => void;
 }) {
   const [code, setCode] = useState("");
+  const [isDemo, setIsDemo] = useState(false);
   return (
     <StageCard>
       <h1 className="text-2xl font-bold text-ocean-deep sm:text-3xl">
         Ready to explore the ocean?
       </h1>
       <p className="mt-3 leading-relaxed text-muted-foreground">
-        You'll read a short lesson called <strong>{LESSON_TITLE}</strong>, play a sorting
-        game, answer three quick questions, and then decide what to do next. It takes
-        about 5–10 minutes, and you can refresh the page without losing your place.
+        You'll read a short lesson called <strong>{LESSON_TITLE}</strong>, play a sorting game,
+        answer three quick questions, and then decide what to do next. It takes about 5–10 minutes,
+        and you can refresh the page without losing your place.
       </p>
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        No names, emails or photos — this is an anonymous educational demonstration with
-        sample content, not official OceanX material.
+        No names or emails are requested. Optional object-only photos are collected for Group B —
+        this is an educational demonstration with sample content, not official OceanX material.
       </p>
       <div className="mt-6">
         <label htmlFor="participant-code" className="text-sm font-semibold">
-          Participant code <span className="font-normal text-muted-foreground">(optional — an adult facilitator can enter one)</span>
+          Participant code{" "}
+          <span className="font-normal text-muted-foreground">
+            (optional — an adult facilitator can enter one)
+          </span>
         </label>
         <Input
           id="participant-code"
@@ -345,11 +415,20 @@ function WelcomeStage({
           className="mt-1.5 max-w-xs"
         />
       </div>
+      <label className="mt-4 flex items-start gap-2 text-sm text-muted-foreground">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={isDemo}
+          onChange={(e) => setIsDemo(e.target.checked)}
+        />{" "}
+        Facilitator demonstration or test session (excluded from participant results).
+      </label>
       <Button
         size="lg"
         className="mt-6"
         disabled={busy}
-        onClick={() => onStart(code.trim() || undefined)}
+        onClick={() => onStart(code.trim() || undefined, isDemo)}
       >
         {busy ? <Loader2 className="animate-spin" /> : <ArrowRight />}
         Begin
@@ -361,9 +440,7 @@ function WelcomeStage({
 function LessonStage({ busy, onDone }: { busy: boolean; onDone: () => void }) {
   return (
     <StageCard>
-      <p className="text-sm font-semibold uppercase tracking-wide text-ocean-teal">
-        Sample lesson
-      </p>
+      <p className="text-sm font-semibold uppercase tracking-wide text-ocean-teal">Sample lesson</p>
       <h1 className="mt-1 text-2xl font-bold text-ocean-deep sm:text-3xl">{LESSON_TITLE}</h1>
       <div className="mt-6 space-y-5">
         {LESSON_SECTIONS.map((s, i) => (
@@ -455,7 +532,12 @@ function InteractionStage({
           );
         })}
       </div>
-      <Button size="lg" className="mt-8" disabled={!allAnswered || busy} onClick={() => onDone(answers)}>
+      <Button
+        size="lg"
+        className="mt-8"
+        disabled={!allAnswered || busy}
+        onClick={() => onDone(answers)}
+      >
         {busy ? <Loader2 className="animate-spin" /> : <ArrowRight />}
         Continue
       </Button>
@@ -463,14 +545,33 @@ function InteractionStage({
   );
 }
 
-function ActivityStage({
+export function ActivityStage({
   busy,
   onSubmit,
 }: {
   busy: boolean;
-  onSubmit: (status: "completed" | "skipped", text?: string) => void;
+  onSubmit: (status: "completed" | "skipped", text?: string, photoDataUrl?: string) => void;
 }) {
   const [text, setText] = useState("");
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | undefined>();
+  const [photoError, setPhotoError] = useState("");
+  const [processing, setProcessing] = useState(false);
+  const photoRequest = useRef(0);
+  const onPhoto = async (file?: File) => {
+    if (!file) return;
+    const request = ++photoRequest.current;
+    setPhotoError("");
+    setProcessing(true);
+    try {
+      const result = await compressPhoto(file);
+      if (request === photoRequest.current) setPhotoDataUrl(result);
+    } catch (error) {
+      if (request === photoRequest.current)
+        setPhotoError(error instanceof Error ? error.message : "Could not process photo");
+    } finally {
+      if (request === photoRequest.current) setProcessing(false);
+    }
+  };
   return (
     <StageCard>
       <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ocean-teal">
@@ -478,8 +579,7 @@ function ActivityStage({
       </p>
       <h1 className="mt-1 text-2xl font-bold text-ocean-deep sm:text-3xl">{ACTIVITY_TITLE}</h1>
       <p className="mt-2 text-muted-foreground">
-        Time to look away from the screen! This is a safe at-home activity to do with an
-        adult.
+        Time to look away from the screen! This is a safe at-home activity to do with an adult.
       </p>
       <ol className="mt-5 list-decimal space-y-2 pl-5 leading-relaxed text-foreground">
         {ACTIVITY_STEPS.map((s) => (
@@ -488,8 +588,8 @@ function ActivityStage({
       </ol>
       <div className="mt-4 flex items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground">
         <Printer className="size-4 shrink-0" />
-        Tip: an adult can print this page or write the steps down so you can do the activity
-        away from the screen. Please don't upload photos of people.
+        Tip: an adult can print this page or write the steps down so you can do the activity away
+        from the screen. Please don't upload photos of people.
       </div>
       <div className="mt-6">
         <label htmlFor="observation" className="text-sm font-semibold">
@@ -505,27 +605,92 @@ function ActivityStage({
           className="mt-1.5"
         />
       </div>
+      <div className="mt-5 rounded-xl border border-border p-4">
+        <label htmlFor="activity-photo" className="flex items-center gap-2 font-semibold">
+          <Camera className="size-5" /> Optional photo of an object
+        </label>
+        <p className="my-2 text-xs text-muted-foreground">
+          Ask an adult first. Only photograph plastic objects, never people, faces, addresses or
+          identifiable locations. The photo is stored privately for research review.
+        </p>
+        <label className="mt-3 block text-sm font-semibold" htmlFor="activity-photo">
+          Take or replace photo
+        </label>
+        <input
+          id="activity-photo"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          disabled={busy || processing}
+          className="mt-1 block w-full text-sm"
+          onChange={(event) => {
+            void onPhoto(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
+        <label className="mt-3 block text-sm font-semibold" htmlFor="library-photo">
+          Choose from photo library or files
+        </label>
+        <input
+          id="library-photo"
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          disabled={busy || processing}
+          className="mt-1 block w-full text-sm"
+          onChange={(event) => {
+            void onPhoto(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Up to 15 MB; converted to a small JPEG without location metadata. You can submit text
+          only.
+        </p>
+        {processing && (
+          <p role="status" className="mt-2 text-sm">
+            Preparing your photo…
+          </p>
+        )}
+        {photoDataUrl && (
+          <img
+            src={photoDataUrl}
+            alt="Selected plastic object"
+            className="mt-3 max-h-44 rounded-lg object-contain"
+          />
+        )}
+        {photoError && (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {photoError}
+          </p>
+        )}
+        {(photoDataUrl || photoError) && (
+          <button
+            type="button"
+            disabled={busy || processing}
+            className="mt-2 text-sm underline"
+            onClick={() => {
+              setPhotoDataUrl(undefined);
+              setPhotoError("");
+            }}
+          >
+            Remove photo / use text only
+          </button>
+        )}
+      </div>
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <Button
           size="lg"
-          disabled={busy || text.trim().length < 5}
-          onClick={() => onSubmit("completed", text)}
+          disabled={busy || processing || text.trim().length < 5 || !!photoError}
+          onClick={() => onSubmit("completed", text, photoDataUrl)}
         >
-          {busy ? <Loader2 className="animate-spin" /> : <Check />}
-          I did it — save my answer
+          {busy ? <Loader2 className="animate-spin" /> : <Check />}I did it — save my answer
         </Button>
-        <Button
-          size="lg"
-          variant="outline"
-          disabled={busy}
-          onClick={() => onSubmit("skipped")}
-        >
+        <Button size="lg" variant="outline" disabled={busy} onClick={() => onSubmit("skipped")}>
           Skip activity
         </Button>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        Skipping is OK — it's recorded so researchers can see how much friction the activity
-        adds.
+        Skipping is OK — it's recorded so researchers can see how much friction the activity adds.
       </p>
     </StageCard>
   );
@@ -545,9 +710,7 @@ function QuizStage({
   const [parentHelp, setParentHelp] = useState<0 | 1 | 2 | null>(null);
 
   const complete =
-    answers.every((a) => a !== null) &&
-    meaningfulness !== null &&
-    (group !== "B" || parentHelp !== null);
+    answers.every((a) => a !== null) && meaningfulness !== null && parentHelp !== null;
 
   return (
     <StageCard>
@@ -575,9 +738,7 @@ function QuizStage({
                     name={q.id}
                     className="accent-primary"
                     checked={answers[qi] === oi}
-                    onChange={() =>
-                      setAnswers((a) => a.map((v, i) => (i === qi ? oi : v)))
-                    }
+                    onChange={() => setAnswers((a) => a.map((v, i) => (i === qi ? oi : v)))}
                   />
                   {opt}
                 </label>
@@ -613,44 +774,40 @@ function QuizStage({
           </p>
         </fieldset>
 
-        {group === "B" && (
-          <fieldset>
-            <legend className="font-display font-semibold">
-              How much help did an adult give you?
-            </legend>
-            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-              {(
-                [
-                  [0, "None — I did it myself"],
-                  [1, "A few prompts"],
-                  [2, "Lots of help"],
-                ] as const
-              ).map(([v, label]) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setParentHelp(v)}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-sm font-semibold transition-colors",
-                    parentHelp === v
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background hover:bg-secondary",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-        )}
+        <fieldset>
+          <legend className="font-display font-semibold">
+            How much help did an adult give you?
+          </legend>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            {(
+              [
+                [0, "None — I did it myself"],
+                [1, "A few prompts"],
+                [2, "Lots of help"],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setParentHelp(v)}
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-sm font-semibold transition-colors",
+                  parentHelp === v
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background hover:bg-secondary",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
       </div>
       <Button
         size="lg"
         className="mt-8"
         disabled={!complete || busy}
-        onClick={() =>
-          onDone(answers as number[], meaningfulness!, parentHelp ?? undefined)
-        }
+        onClick={() => onDone(answers as number[], meaningfulness!, parentHelp ?? undefined)}
       >
         {busy ? <Loader2 className="animate-spin" /> : <ArrowRight />}
         Save my answers
@@ -660,26 +817,40 @@ function QuizStage({
 }
 
 function DecisionStage({
+  stored,
   busy,
   onChoose,
 }: {
   busy: boolean;
   onChoose: (choice: "continue" | "finish") => void;
+  stored: StoredSession;
 }) {
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState(false);
+  const recordView = async () => {
+    setError(false);
+    try {
+      await markDecisionViewed({ data: stored });
+      setReady(true);
+    } catch {
+      setError(true);
+    }
+  };
+  useEffect(() => {
+    void recordView();
+  }, []);
   return (
     <StageCard>
       <h1 className="text-center text-2xl font-bold text-ocean-deep sm:text-3xl">
         What would you like to do next?
       </h1>
-      <p className="mt-2 text-center text-muted-foreground">
-        It's completely up to you.
-      </p>
+      <p className="mt-2 text-center text-muted-foreground">It's completely up to you.</p>
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || !ready}
           onClick={() => onChoose("continue")}
-          className="flex flex-col items-center gap-3 rounded-2xl border-2 border-primary bg-primary/5 p-8 text-center transition-colors hover:bg-primary/10 disabled:opacity-60"
+          className="flex flex-col items-center gap-3 rounded-2xl border-2 border-border bg-card p-8 text-center transition-colors hover:bg-secondary disabled:opacity-60"
         >
           <Compass className="size-10 text-primary" />
           <span className="font-display text-xl font-bold text-ocean-deep">
@@ -691,20 +862,24 @@ function DecisionStage({
         </button>
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || !ready}
           onClick={() => onChoose("finish")}
           className="flex flex-col items-center gap-3 rounded-2xl border-2 border-border bg-card p-8 text-center transition-colors hover:bg-secondary disabled:opacity-60"
         >
           <Check className="size-10 text-ocean-teal" />
-          <span className="font-display text-xl font-bold text-ocean-deep">
-            Finish for now
-          </span>
-          <span className="text-sm text-muted-foreground">
-            End this session here
-          </span>
+          <span className="font-display text-xl font-bold text-ocean-deep">Finish for now</span>
+          <span className="text-sm text-muted-foreground">End this session here</span>
         </button>
       </div>
-      {busy && (
+      {error && (
+        <p role="alert" className="mt-4 text-center text-sm">
+          We couldn't save your progress.{" "}
+          <button className="underline" onClick={() => void recordView()}>
+            Try again
+          </button>
+        </p>
+      )}
+      {(busy || (!ready && !error)) && (
         <p className="mt-4 flex justify-center">
           <Loader2 className="size-5 animate-spin text-primary" />
         </p>
@@ -724,8 +899,8 @@ function FinishedStage() {
           Thanks for learning with us!
         </h1>
         <p className="mx-auto mt-3 max-w-md leading-relaxed text-muted-foreground">
-          Your session is complete and saved. Every piece of plastic we keep out of drains
-          and rivers is one less piece in the ocean.
+          Your session is complete and saved. Every piece of plastic we keep out of drains and
+          rivers is one less piece in the ocean.
         </p>
         <Button asChild variant="outline" className="mt-6">
           <Link to="/">Back to the start</Link>

@@ -37,13 +37,11 @@ function Landing() {
         <div className="mb-6 flex size-16 items-center justify-center rounded-2xl ocean-deep-surface text-primary-foreground shadow-lg">
           <Waves className="size-8" />
         </div>
-        <h1 className="text-4xl font-bold text-ocean-deep sm:text-5xl">
-          OceanX Learning Journey
-        </h1>
+        <h1 className="text-4xl font-bold text-ocean-deep sm:text-5xl">OceanX Learning Journey</h1>
         <p className="mt-2 text-xl font-semibold text-ocean-teal">Beyond the Screen</p>
         <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-          A short ocean lesson, a sorting game, and — for some learners — a small
-          real-world activity at home. At the end, you choose what happens next.
+          A short ocean lesson, a sorting game, and — for some learners — a small real-world
+          activity at home. At the end, you choose what happens next.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
@@ -61,7 +59,8 @@ function Landing() {
         <p className="mt-8 flex max-w-md items-start gap-2 rounded-xl border border-border bg-card/80 p-4 text-left text-sm text-muted-foreground">
           <FlaskConical className="mt-0.5 size-4 shrink-0 text-ocean-teal" />
           Educational demonstration; sample lesson, not official OceanX content. This is an
-          anonymous university research prototype — no names, emails or photos are collected.
+          anonymous university research prototype — no learner names or emails are requested. Group
+          B can optionally submit an object-only photograph for private researcher review.
         </p>
 
         <Link

@@ -1,0 +1,31 @@
+{
+  "verifiedAt": "2026-10-13T14:13:08.384Z",
+  "deviceCheck": "User confirmed iPhone Safari link, camera, preview, save, next module and saved-start confirmation",
+  "databaseVerified": true,
+  "records": [
+    {
+      "participant_code": "PHONE-DEMO",
+      "assigned_group": "A",
+      "is_demo": true,
+      "activity_status": null,
+      "quiz_completed_at": "2026-10-13T14:04:19.713506+00:00",
+      "decision_reached_at": "2026-10-13T14:04:20.993255+00:00",
+      "continuation_choice": "finish",
+      "next_module_started_at": null,
+      "classified_status": "Finished",
+      "hasPhoto": false
+    },
+    {
+      "participant_code": "PHONE-DEMO",
+      "assigned_group": "B",
+      "is_demo": true,
+      "activity_status": "completed",
+      "quiz_completed_at": "2026-10-13T14:06:27.564697+00:00",
+      "decision_reached_at": "2026-10-13T14:06:28.418819+00:00",
+      "continuation_choice": "continue",
+      "next_module_started_at": "2026-10-13T14:11:48.693179+00:00",
+      "classified_status": "Continued",
+      "hasPhoto": true
+    }
+  ]
+}
